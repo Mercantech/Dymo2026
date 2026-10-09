@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { AUTH_CLIENT_ID } from '../auth/config'
-import { checkBrowserSupport } from '../printer/browser'
 
 export function LoginPage() {
   const { loggedIn, login } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const support = checkBrowserSupport()
 
   if (loggedIn) return <Navigate to="/" replace />
 
@@ -39,16 +37,6 @@ export function LoginPage() {
           {busy ? 'Åbner login…' : 'Log ind med Mercantec'}
         </button>
         {error && <p className="status error">{error}</p>}
-        {support.issues.length > 0 && (
-          <div className="notice">
-            Browserkrav
-            <ul>
-              {support.issues.map((issue) => (
-                <li key={issue}>{issue}</li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   )

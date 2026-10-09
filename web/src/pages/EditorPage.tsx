@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { composeLabel, type ComposeResult } from '../label/compose'
 import type { LabelSpec } from '../label/types'
-import { checkBrowserSupport, formatBluetoothError } from '../printer/browser'
+import { formatBluetoothError } from '../printer/browser'
 import {
   connectPrinter,
   disconnectPrinter,
@@ -22,7 +22,6 @@ const DEFAULT_SPEC: LabelSpec = {
 
 export function EditorPage() {
   const { loggedIn, displayName, logout } = useAuth()
-  const support = useMemo(() => checkBrowserSupport(), [])
 
   const [spec, setSpec] = useState<LabelSpec>(DEFAULT_SPEC)
   const [composed, setComposed] = useState<ComposeResult | null>(null)
@@ -227,7 +226,7 @@ export function EditorPage() {
             <button
               className="btn"
               type="button"
-              disabled={!support.ok || busy !== null}
+              disabled={busy !== null}
               onClick={onConnect}
             >
               {busy === 'connect' ? 'Forbinder…' : 'Forbind printer'}
@@ -252,18 +251,10 @@ export function EditorPage() {
           </button>
         </div>
 
-        {status && <p className={`status ${statusKind ?? ''}`}>{status}</p>}
-
-        {(support.issues.length > 0) && (
-          <div className="notice">
-            Browserkrav
-            <ul>
-              {support.issues.map((issue) => (
-                <li key={issue}>{issue}</li>
-              ))}
-            </ul>
-          </div>
+        {statusKind === 'error' && status && (
+          <p className="status error">{status}</p>
         )}
+        {statusKind === 'ok' && status && <p className="status ok">{status}</p>}
       </div>
     </div>
   )
