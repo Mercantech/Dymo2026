@@ -9,6 +9,7 @@ import {
   disconnectPrinter,
   getConnectedName,
   printLabel,
+  tryAutoConnect,
 } from '../printer/session'
 
 const DEFAULT_SPEC: LabelSpec = {
@@ -54,14 +55,27 @@ export function EditorPage() {
     }
   }, [spec])
 
+  useEffect(() => {
+    let cancelled = false
+    void tryAutoConnect().then((name) => {
+      if (cancelled || !name) return
+      setPrinterName(name)
+      setStatus(`Forbundet: ${name}`)
+      setStatusKind('ok')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   if (!loggedIn) return <Navigate to="/login" replace />
 
-  async function onConnect() {
+  async function onConnect(forcePicker = false) {
     setBusy('connect')
     setStatus(null)
     setStatusKind(null)
     try {
-      const name = await connectPrinter()
+      const name = await connectPrinter({ forcePicker })
       setPrinterName(name)
       setStatus(`Forbundet: ${name}`)
       setStatusKind('ok')
@@ -227,25 +241,35 @@ export function EditorPage() {
               className="btn"
               type="button"
               disabled={busy !== null}
-              onClick={onConnect}
+              onClick={() => void onConnect(false)}
             >
               {busy === 'connect' ? 'Forbinder…' : 'Forbind printer'}
             </button>
           ) : (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              disabled={busy !== null}
-              onClick={onDisconnect}
-            >
-              Afbryd ({printerName})
-            </button>
+            <>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void onDisconnect()}
+              >
+                Afbryd ({printerName})
+              </button>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void onConnect(true)}
+              >
+                Vælg anden
+              </button>
+            </>
           )}
           <button
             className="btn btn-tape"
             type="button"
             disabled={!printerName || !composed || busy !== null}
-            onClick={onPrint}
+            onClick={() => void onPrint()}
           >
             {busy === 'print' ? 'Printer…' : 'Print'}
           </button>
