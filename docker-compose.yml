@@ -12,8 +12,8 @@ services:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
       - traefik.http.routers.dymotag.rule=Host(`dymo.mercantec.tech`)
-      - traefik.http.routers.dymotag.entrypoints=websecure
-      - traefik.http.routers.dymotag.tls.certresolver=letsencrypt
+      - traefik.http.routers.dymotag.entrypoints=web
+      - traefik.http.routers.dymotag.service=dymotag
       - traefik.http.services.dymotag.loadbalancer.server.port=3000
 
 networks:
