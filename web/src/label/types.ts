@@ -5,6 +5,11 @@ export type LabelSpec = {
   qrContent: string
   barcodeEnabled: boolean
   barcodeContent: string
+  /** PNG/JPEG/WebP/SVG as data URL — rasterized to 1bpp. */
+  logoEnabled: boolean
+  logoDataUrl: string | null
+  /** Flip black/white (useful for dark logos on transparent). */
+  logoInvert: boolean
 }
 
 /** Protocol head rows (across 12 mm tape). */

@@ -227,12 +227,29 @@ a {
 
 .field input[type='text'],
 .field input[type='number'],
+.field input[type='file'],
 .field textarea {
   width: 100%;
   border: 1.5px solid var(--line);
   background: rgba(255, 255, 255, 0.7);
   padding: 0.7rem 0.8rem;
   border-radius: 2px;
+}
+
+.field input[type='file'] {
+  padding: 0.55rem 0.65rem;
+  font-size: 0.9rem;
+}
+
+.field input[type='file']:disabled {
+  opacity: 0.5;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  opacity: 0.85;
 }
 
 .field input:focus,

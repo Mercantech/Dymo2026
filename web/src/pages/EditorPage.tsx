@@ -19,6 +19,31 @@ const DEFAULT_SPEC: LabelSpec = {
   qrContent: 'https://dymo.mercantec.tech',
   barcodeEnabled: false,
   barcodeContent: 'DYMO2026',
+  logoEnabled: false,
+  logoDataUrl: null,
+  logoInvert: false,
+}
+
+const MAX_LOGO_BYTES = 2_000_000
+
+function readLogoFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Vælg et billede (PNG, JPEG, WebP eller SVG)'))
+      return
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      reject(new Error('Billedet er for stort (max 2 MB)'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result)
+      else reject(new Error('Kunne ikke læse filen'))
+    }
+    reader.onerror = () => reject(new Error('Kunne ikke læse filen'))
+    reader.readAsDataURL(file)
+  })
 }
 
 export function EditorPage() {
@@ -120,7 +145,7 @@ export function EditorPage() {
           <h1 className="brand">
             Dymo<span>Tag</span>
           </h1>
-          <p className="lede">12 mm LetraTag — tekst, QR og Code128.</p>
+          <p className="lede">12 mm LetraTag — tekst, logo, QR og Code128.</p>
         </div>
         <div className="topbar-actions">
           {displayName && <span className="user-chip">{displayName}</span>}
@@ -181,6 +206,71 @@ export function EditorPage() {
               onChange={(e) => setCopies(Math.max(1, Number(e.target.value) || 1))}
             />
           </div>
+        </div>
+
+        <div className="field">
+          <div className="toggle-row">
+            <input
+              id="logoEnabled"
+              type="checkbox"
+              checked={spec.logoEnabled}
+              onChange={(e) => setSpec((s) => ({ ...s, logoEnabled: e.target.checked }))}
+            />
+            <label htmlFor="logoEnabled">Logo / billede</label>
+          </div>
+          <input
+            id="logoFile"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            disabled={!spec.logoEnabled}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (!file) return
+              void readLogoFile(file)
+                .then((dataUrl) => {
+                  setSpec((s) => ({
+                    ...s,
+                    logoEnabled: true,
+                    logoDataUrl: dataUrl,
+                  }))
+                  setStatus(null)
+                  setStatusKind(null)
+                })
+                .catch((err: unknown) => {
+                  setStatus(err instanceof Error ? err.message : 'Upload fejlede')
+                  setStatusKind('error')
+                })
+            }}
+          />
+          {spec.logoDataUrl && (
+            <div className="toggle-row" style={{ marginTop: '0.5rem' }}>
+              <input
+                id="logoInvert"
+                type="checkbox"
+                checked={spec.logoInvert}
+                disabled={!spec.logoEnabled}
+                onChange={(e) =>
+                  setSpec((s) => ({ ...s, logoInvert: e.target.checked }))
+                }
+              />
+              <label htmlFor="logoInvert">Invertér (hvidt logo → sort)</label>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                style={{ marginLeft: 'auto' }}
+                disabled={!spec.logoEnabled}
+                onClick={() =>
+                  setSpec((s) => ({ ...s, logoDataUrl: null, logoEnabled: false }))
+                }
+              >
+                Fjern
+              </button>
+            </div>
+          )}
+          <p className="hint">
+            Konverteres til sort/hvid. Bedst med skarpe, ensfarvede logoer.
+          </p>
         </div>
 
         <div className="field">
