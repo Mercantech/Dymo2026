@@ -1,0 +1,6 @@
+@DymoTag.Api_HostAddress = http://localhost:5033
+
+GET {{DymoTag.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

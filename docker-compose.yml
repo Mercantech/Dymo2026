@@ -1,11 +1,49 @@
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dymotag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: ${POSTGRES_DB:-dymotag}
+    volumes:
+      - dymotag_pg:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-dymotag};Username=${POSTGRES_USER:-dymotag};Password=${POSTGRES_PASSWORD}
+      AUTH_ISSUER: ${AUTH_ISSUER:-https://auth.mercantec.tech}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-mercantec-apps}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:-d969fced-f7be-46d4-9bb9-5a2f03ca6974}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://dymo.mercantec.tech}
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+    networks:
+      - default
+
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
       args:
         VITE_AUTH_CLIENT_ID: ${VITE_AUTH_CLIENT_ID:-dymotag}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
     restart: unless-stopped
+    depends_on:
+      - api
     networks:
       - default
     labels:
@@ -15,6 +53,9 @@ services:
       - traefik.http.routers.dymotag.entrypoints=web
       - traefik.http.routers.dymotag.service=dymotag
       - traefik.http.services.dymotag.loadbalancer.server.port=3000
+
+volumes:
+  dymotag_pg:
 
 networks:
   default:

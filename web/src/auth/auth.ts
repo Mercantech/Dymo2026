@@ -141,17 +141,26 @@ export function logout(): void {
   window.location.assign('/login')
 }
 
-export function parseDisplayName(): string | null {
+function parseJwtPayload(): { name?: string; email?: string; sub?: string } | null {
   const tokens = loadTokens()
   if (!tokens?.access_token) return null
   try {
     const payload = tokens.access_token.split('.')[1]
     if (!payload) return null
-    const json = JSON.parse(
+    return JSON.parse(
       atob(payload.replace(/-/g, '+').replace(/_/g, '/')),
-    ) as { name?: string; email?: string }
-    return json.name || json.email || null
+    ) as { name?: string; email?: string; sub?: string }
   } catch {
     return null
   }
+}
+
+export function parseDisplayName(): string | null {
+  const json = parseJwtPayload()
+  if (!json) return null
+  return json.name || json.email || null
+}
+
+export function parseUserSub(): string | null {
+  return parseJwtPayload()?.sub ?? null
 }

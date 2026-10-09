@@ -1,4 +1,14 @@
 services:
+  db:
+    ports:
+      - "5433:5432"
+
+  api:
+    ports:
+      - "8080:8080"
+    environment:
+      CORS_ORIGIN: http://localhost:5173,http://localhost:3000
+
   web:
     ports:
       - "3000:3000"

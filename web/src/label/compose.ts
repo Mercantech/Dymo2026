@@ -3,12 +3,14 @@ import QRCode from 'qrcode'
 import type { RawImageData } from '@mbtech-nl/bitmap'
 import {
   ASPECT,
+  DEFAULT_MIN_LENGTH_MM,
+  DEFAULT_PAD_MM,
   GAP,
   HEAD_ROWS,
-  H_PAD,
-  MIN_FEED_COLUMNS,
   PRINTABLE_ROWS,
+  mmToFeedColumns,
   type LabelSpec,
+  type LogoMode,
 } from './types'
 
 const PREVIEW_SCALE = 6
@@ -17,6 +19,8 @@ export type ComposeResult = {
   /** Head-aligned for LT driver: width = across head, height = feed. */
   image: RawImageData
   previewDataUrl: string
+  /** Smaller preview for history upload. */
+  historyPreviewDataUrl: string
   widthPx: number
   heightPx: number
 }
@@ -50,10 +54,6 @@ function landscapeToHeadAligned(land: RawImageData): RawImageData {
   return { width: outW, height: outH, data: out }
 }
 
-/**
- * Physically square QR: each module stretched by ASPECT on the feed axis
- * so the printed code is square on 12 mm tape.
- */
 function makeQrCanvas(content: string, sideHead: number): HTMLCanvasElement {
   const qr = QRCode.create(content, { errorCorrectionLevel: 'M' })
   const n = qr.modules.size
@@ -82,7 +82,6 @@ function makeQrCanvas(content: string, sideHead: number): HTMLCanvasElement {
 
 function makeBarcodeCanvas(content: string, height: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
-  // Bar width in feed dots — thicker so codes aren't hairlines at 200 dpi
   const barWidth = Math.max(2, Math.round(ASPECT))
   JsBarcode(canvas, content, {
     format: 'CODE128',
@@ -105,14 +104,88 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/**
- * Fit logo to tape height, stretch feed axis by ASPECT, hard-threshold to 1bpp.
- * Dark / opaque pixels → black (or inverted).
- */
+function darknessAt(data: Uint8ClampedArray, i: number): number {
+  const a = data[i + 3]! / 255
+  const lum =
+    (0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!) / 255
+  return (1 - lum) * a
+}
+
+function applyHardThreshold(
+  data: Uint8ClampedArray,
+  out: Uint8ClampedArray,
+  threshold: number,
+  invert: boolean,
+) {
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]! / 255
+    let black = darknessAt(data, i) >= threshold
+    if (invert) black = !black && a > 0.08
+    const v = black ? 0 : 255
+    out[i] = v
+    out[i + 1] = v
+    out[i + 2] = v
+    out[i + 3] = 255
+  }
+}
+
+/** Floyd–Steinberg dither on darkness map → 1bpp. */
+function applyDither(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  out: Uint8ClampedArray,
+  threshold: number,
+  invert: boolean,
+) {
+  const buf = new Float32Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      let d = darknessAt(data, i)
+      if (invert) {
+        const a = data[i + 3]! / 255
+        d = a > 0.08 ? 1 - d : 0
+      }
+      // Bias threshold: higher threshold → more black after dither
+      buf[y * width + x] = d + (threshold - 0.5) * 0.35
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      const old = buf[idx]!
+      const black = old >= 0.5
+      const neu = black ? 1 : 0
+      const err = old - neu
+      buf[idx] = neu
+
+      const diffuse = (nx: number, ny: number, factor: number) => {
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) return
+        buf[ny * width + nx]! += err * factor
+      }
+      diffuse(x + 1, y, 7 / 16)
+      diffuse(x - 1, y + 1, 3 / 16)
+      diffuse(x, y + 1, 5 / 16)
+      diffuse(x + 1, y + 1, 1 / 16)
+
+      const i = idx * 4
+      const v = black ? 0 : 255
+      out[i] = v
+      out[i + 1] = v
+      out[i + 2] = v
+      out[i + 3] = 255
+    }
+  }
+}
+
 async function makeLogoCanvas(
   dataUrl: string,
   maxHead: number,
   invert: boolean,
+  threshold: number,
+  mode: LogoMode,
 ): Promise<HTMLCanvasElement> {
   const img = await loadImage(dataUrl)
   const srcW = Math.max(1, img.naturalWidth || img.width)
@@ -138,21 +211,14 @@ async function makeLogoCanvas(
   const octx = out.getContext('2d')
   if (!octx) throw new Error('Canvas 2D ikke tilgængelig')
   const imgData = octx.createImageData(feedPx, headPx)
+  const t = Math.min(0.95, Math.max(0.05, threshold))
 
-  for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3]! / 255
-    const lum =
-      (0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!) / 255
-    // Transparent → white; dark → black
-    const darkness = (1 - lum) * a
-    let black = darkness >= 0.45
-    if (invert) black = !black && a > 0.08
-    const v = black ? 0 : 255
-    imgData.data[i] = v
-    imgData.data[i + 1] = v
-    imgData.data[i + 2] = v
-    imgData.data[i + 3] = 255
+  if (mode === 'dither') {
+    applyDither(data, feedPx, headPx, imgData.data, t, invert)
+  } else {
+    applyHardThreshold(data, imgData.data, t, invert)
   }
+
   octx.putImageData(imgData, 0, 0)
   return out
 }
@@ -162,7 +228,6 @@ function measureTextWidth(text: string, fontSize: number): number {
   const ctx = canvas.getContext('2d')
   if (!ctx) return text.length * fontSize * 0.55
   ctx.font = `700 ${fontSize}px "IBM Plex Sans", sans-serif`
-  // Logical width in head-dots; feed width = logical * ASPECT
   return Math.ceil(ctx.measureText(text).width * ASPECT)
 }
 
@@ -177,10 +242,12 @@ function upscalePreview(src: HTMLCanvasElement, scale: number): string {
   return out.toDataURL('image/png')
 }
 
-/**
- * Native 32-row landscape draft with feed-axis aspect correction,
- * then rotate to head-aligned portrait for printer.print (rotate: 0).
- */
+function historyPreview(src: HTMLCanvasElement): string {
+  const maxW = 480
+  const scale = Math.min(2, maxW / Math.max(1, src.width))
+  return upscalePreview(src, Math.max(1, scale))
+}
+
 export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   const text = spec.text.trim()
   const qrContent = spec.qrContent.trim()
@@ -196,7 +263,12 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   }
 
   const fontSize = Math.max(16, Math.min(30, Math.round(spec.fontSize)))
-  const pad = Math.round(H_PAD * ASPECT)
+  const padMm = Number.isFinite(spec.padMm) ? spec.padMm : DEFAULT_PAD_MM
+  const minMm = Number.isFinite(spec.minLengthMm)
+    ? spec.minLengthMm
+    : DEFAULT_MIN_LENGTH_MM
+  const pad = mmToFeedColumns(Math.min(20, Math.max(0, padMm)))
+  const minFeed = mmToFeedColumns(Math.min(120, Math.max(15, minMm)))
   const gap = Math.round(GAP * ASPECT)
 
   let logoCanvas: HTMLCanvasElement | null = null
@@ -208,6 +280,8 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
       spec.logoDataUrl,
       PRINTABLE_ROWS,
       spec.logoInvert,
+      spec.logoThreshold ?? 0.45,
+      spec.logoMode ?? 'hard',
     )
   }
   if (showQr) qrCanvas = makeQrCanvas(qrContent, PRINTABLE_ROWS)
@@ -226,7 +300,7 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   const contentWidth =
     parts.reduce((a, b) => a + b, 0) + gap * Math.max(0, parts.length - 1)
 
-  const width = Math.max(MIN_FEED_COLUMNS, contentWidth + pad * 2)
+  const width = Math.max(minFeed, contentWidth + pad * 2)
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -248,7 +322,6 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   }
 
   if (showText) {
-    // Draw in head-dot font size, stretch horizontally to match feed DPI
     ctx.save()
     ctx.translate(x, HEAD_ROWS / 2)
     ctx.scale(ASPECT, 1)
@@ -276,6 +349,7 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   return {
     image,
     previewDataUrl: upscalePreview(canvas, PREVIEW_SCALE),
+    historyPreviewDataUrl: historyPreview(canvas),
     widthPx: canvas.width * PREVIEW_SCALE,
     heightPx: canvas.height * PREVIEW_SCALE,
   }

@@ -1,4 +1,9 @@
-import type { LabelSpec } from './types'
+import {
+  DEFAULT_MIN_LENGTH_MM,
+  DEFAULT_PAD_MM,
+  type LabelSpec,
+  type LogoMode,
+} from './types'
 
 const STORAGE_KEY = 'dymotag:last-label'
 
@@ -9,20 +14,43 @@ export type SavedLabel = {
   savedAt: number
 }
 
-function isLabelSpec(value: unknown): value is LabelSpec {
-  if (!value || typeof value !== 'object') return false
-  const v = value as Record<string, unknown>
-  return (
-    typeof v.text === 'string' &&
-    typeof v.fontSize === 'number' &&
-    typeof v.qrEnabled === 'boolean' &&
-    typeof v.qrContent === 'string' &&
-    typeof v.barcodeEnabled === 'boolean' &&
-    typeof v.barcodeContent === 'string' &&
-    typeof v.logoEnabled === 'boolean' &&
-    (v.logoDataUrl === null || typeof v.logoDataUrl === 'string') &&
-    typeof v.logoInvert === 'boolean'
-  )
+export function normalizeLabelSpec(raw: unknown): LabelSpec | null {
+  if (!raw || typeof raw !== 'object') return null
+  const v = raw as Record<string, unknown>
+  if (typeof v.text !== 'string' || typeof v.fontSize !== 'number') return null
+
+  const logoMode: LogoMode = v.logoMode === 'dither' ? 'dither' : 'hard'
+  const threshold =
+    typeof v.logoThreshold === 'number' && Number.isFinite(v.logoThreshold)
+      ? Math.min(0.95, Math.max(0.05, v.logoThreshold))
+      : 0.45
+  const padMm =
+    typeof v.padMm === 'number' && Number.isFinite(v.padMm)
+      ? Math.min(20, Math.max(0, v.padMm))
+      : DEFAULT_PAD_MM
+  const minLengthMm =
+    typeof v.minLengthMm === 'number' && Number.isFinite(v.minLengthMm)
+      ? Math.min(120, Math.max(15, v.minLengthMm))
+      : DEFAULT_MIN_LENGTH_MM
+
+  return {
+    text: v.text,
+    fontSize: v.fontSize,
+    qrEnabled: Boolean(v.qrEnabled),
+    qrContent: typeof v.qrContent === 'string' ? v.qrContent : '',
+    barcodeEnabled: Boolean(v.barcodeEnabled),
+    barcodeContent: typeof v.barcodeContent === 'string' ? v.barcodeContent : '',
+    logoEnabled: Boolean(v.logoEnabled),
+    logoDataUrl:
+      v.logoDataUrl === null || typeof v.logoDataUrl === 'string'
+        ? (v.logoDataUrl as string | null)
+        : null,
+    logoInvert: Boolean(v.logoInvert),
+    logoThreshold: threshold,
+    logoMode,
+    padMm,
+    minLengthMm,
+  }
 }
 
 export function loadSavedLabel(): SavedLabel | null {
@@ -32,9 +60,10 @@ export function loadSavedLabel(): SavedLabel | null {
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object') return null
     const obj = parsed as Record<string, unknown>
-    if (!isLabelSpec(obj.spec)) return null
+    const spec = normalizeLabelSpec(obj.spec)
+    if (!spec) return null
     return {
-      spec: obj.spec,
+      spec,
       copies: Math.max(1, Math.min(20, Number(obj.copies) || 1)),
       autoCut: obj.autoCut !== false,
       savedAt: typeof obj.savedAt === 'number' ? obj.savedAt : Date.now(),
@@ -44,7 +73,6 @@ export function loadSavedLabel(): SavedLabel | null {
   }
 }
 
-/** Persist latest label in this browser. Returns false if storage is full. */
 export function saveLabel(spec: LabelSpec, copies: number, autoCut: boolean): boolean {
   const payload: SavedLabel = {
     spec,
@@ -56,7 +84,6 @@ export function saveLabel(spec: LabelSpec, copies: number, autoCut: boolean): bo
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     return true
   } catch {
-    // Quota — retry without logo data URL
     if (spec.logoDataUrl) {
       try {
         localStorage.setItem(

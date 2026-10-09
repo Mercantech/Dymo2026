@@ -8,3 +8,5 @@ dist/
 Thumbs.db
 web/node_modules/
 web/dist/
+api/bin/
+api/obj/
