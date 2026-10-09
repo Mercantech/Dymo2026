@@ -1,7 +1,6 @@
 import {
   AUTH_AUTHORIZE,
   AUTH_CLIENT_ID,
-  AUTH_SIGNOUT,
   AUTH_TOKEN,
   clearTokens,
   getRedirectUri,
@@ -136,10 +135,10 @@ export async function getAccessToken(): Promise<string | null> {
   return tokens.access_token
 }
 
+/** Log kun ud af denne SPA — rør ikke auth.mercantec.tech-sessionen. */
 export function logout(): void {
   clearTokens()
-  const returnUrl = encodeURIComponent(window.location.origin + '/')
-  window.location.assign(`${AUTH_SIGNOUT}?returnUrl=${returnUrl}`)
+  window.location.assign('/login')
 }
 
 export function parseDisplayName(): string | null {

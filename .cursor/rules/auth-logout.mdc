@@ -1,0 +1,12 @@
+---
+description: Lokal logout — aldrig fuld Mercantec Auth-signout
+alwaysApply: true
+---
+
+# Auth logout
+
+Ved “Log ud” i DymoTag (og andre SPA’er):
+
+- Ryd kun lokale tokens (sessionStorage/memory)
+- Navigér til appens egen login-route
+- **Kald aldrig** `https://auth.mercantec.tech/signout` — det logger brugeren ud af hele auth.mercantec.tech-sessionen
