@@ -39,7 +39,7 @@ export function LoginPage() {
           {busy ? 'Åbner login…' : 'Log ind med Mercantec'}
         </button>
         {error && <p className="status error">{error}</p>}
-        {!support.ok && (
+        {support.issues.length > 0 && (
           <div className="notice">
             Browserkrav
             <ul>

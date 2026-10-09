@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { composeLabel, type ComposeResult } from '../label/compose'
 import type { LabelSpec } from '../label/types'
-import { checkBrowserSupport } from '../printer/browser'
+import { checkBrowserSupport, formatBluetoothError } from '../printer/browser'
 import {
   connectPrinter,
   disconnectPrinter,
@@ -68,7 +68,7 @@ export function EditorPage() {
       setStatusKind('ok')
     } catch (e) {
       setPrinterName(null)
-      setStatus(e instanceof Error ? e.message : 'Forbindelse fejlede')
+      setStatus(formatBluetoothError(e))
       setStatusKind('error')
     } finally {
       setBusy(null)
@@ -254,7 +254,7 @@ export function EditorPage() {
 
         {status && <p className={`status ${statusKind ?? ''}`}>{status}</p>}
 
-        {!support.ok && (
+        {(support.issues.length > 0) && (
           <div className="notice">
             Browserkrav
             <ul>

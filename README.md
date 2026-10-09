@@ -1,15 +1,23 @@
 # DymoTag
 
-Webapp til DYMO LetraTag LT-200B — print tekst, QR og Code128 via Web Bluetooth (Chrome/Edge).
+Webapp til DYMO LetraTag LT-200B — print tekst, QR og Code128 via Web Bluetooth (Chrome/Edge/Brave).
 
 **Prod:** https://dymo.mercantec.tech
 
 ## Krav
 
-- Chrome eller Edge (Web Bluetooth)
+- Chrome, Edge eller Brave (Web Bluetooth)
 - HTTPS eller `localhost`
 - Bluetooth tændt + LT-200B i nærheden
 - Mercantec Auth-login
+
+### Brave
+
+Web Bluetooth er slået fra som standard. Aktivér:
+
+1. Åbn `brave://flags/#brave-web-bluetooth-api`
+2. Sæt **Web Bluetooth API** til **Enabled**
+3. Klik **Relaunch**
 
 ## Lokal udvikling
 
