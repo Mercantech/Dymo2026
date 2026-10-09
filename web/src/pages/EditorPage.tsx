@@ -13,7 +13,7 @@ import {
 
 const DEFAULT_SPEC: LabelSpec = {
   text: 'Hello DymoTag',
-  fontSize: 26,
+  fontSize: 28,
   qrEnabled: false,
   qrContent: 'https://dymo.mercantec.tech',
   barcodeEnabled: false,
@@ -148,11 +148,11 @@ export function EditorPage() {
             <input
               id="fontSize"
               type="number"
-              min={14}
+              min={16}
               max={30}
               value={spec.fontSize}
               onChange={(e) =>
-                setSpec((s) => ({ ...s, fontSize: Number(e.target.value) || 26 }))
+                setSpec((s) => ({ ...s, fontSize: Number(e.target.value) || 28 }))
               }
             />
           </div>
