@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { composeLabel, type ComposeResult } from '../label/compose'
+import { loadSavedLabel, saveLabel } from '../label/persist'
 import type { LabelSpec } from '../label/types'
 import { formatBluetoothError } from '../printer/browser'
 import {
@@ -23,6 +24,8 @@ const DEFAULT_SPEC: LabelSpec = {
   logoDataUrl: null,
   logoInvert: false,
 }
+
+const INITIAL = loadSavedLabel()
 
 const MAX_LOGO_BYTES = 2_000_000
 
@@ -49,12 +52,12 @@ function readLogoFile(file: File): Promise<string> {
 export function EditorPage() {
   const { loggedIn, displayName, logout } = useAuth()
 
-  const [spec, setSpec] = useState<LabelSpec>(DEFAULT_SPEC)
+  const [spec, setSpec] = useState<LabelSpec>(INITIAL?.spec ?? DEFAULT_SPEC)
   const [composed, setComposed] = useState<ComposeResult | null>(null)
   const [composeError, setComposeError] = useState<string | null>(null)
   const [printerName, setPrinterName] = useState<string | null>(getConnectedName())
-  const [copies, setCopies] = useState(1)
-  const [autoCut, setAutoCut] = useState(true)
+  const [copies, setCopies] = useState(INITIAL?.copies ?? 1)
+  const [autoCut, setAutoCut] = useState(INITIAL?.autoCut ?? true)
   const [busy, setBusy] = useState<'connect' | 'print' | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [statusKind, setStatusKind] = useState<'ok' | 'error' | null>(null)
@@ -79,6 +82,14 @@ export function EditorPage() {
       window.clearTimeout(timer)
     }
   }, [spec])
+
+  // Autosave draft + last print settings in this browser
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      saveLabel(spec, copies, autoCut)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [spec, copies, autoCut])
 
   useEffect(() => {
     let cancelled = false
@@ -127,6 +138,7 @@ export function EditorPage() {
     setStatusKind(null)
     try {
       const result = await printLabel(composed.image, { copies, autoCut })
+      saveLabel(spec, copies, autoCut)
       const err = result?.errors?.[0]?.message
       setStatus(err ? `Print færdig med advarsel: ${err}` : 'Print OK')
       setStatusKind(err ? 'error' : 'ok')
