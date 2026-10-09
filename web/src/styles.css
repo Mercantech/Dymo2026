@@ -179,10 +179,10 @@ a {
 .tape-preview {
   display: block;
   margin: 0 auto;
-  height: clamp(56px, 12vw, 88px);
+  height: clamp(72px, 14vw, 112px);
   width: auto;
   max-width: 100%;
-  image-rendering: pixelated;
+  image-rendering: auto;
   background: #fff;
   box-shadow:
     0 0 0 2px var(--tape),
