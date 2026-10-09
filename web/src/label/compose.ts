@@ -51,19 +51,16 @@ function landscapeToHeadAligned(land: RawImageData): RawImageData {
 }
 
 /**
- * Physically square QR: `sideHead` dots across tape, `sideFeed` along tape
- * so mm matches on both axes (feed DPI ≫ head DPI).
+ * Physically square QR: each module stretched by ASPECT on the feed axis
+ * so the printed code is square on 12 mm tape.
  */
 function makeQrCanvas(content: string, sideHead: number): HTMLCanvasElement {
   const qr = QRCode.create(content, { errorCorrectionLevel: 'M' })
   const n = qr.modules.size
   const moduleHead = Math.max(1, Math.floor(sideHead / n))
-  const headPx = moduleHead * n
-  const feedPx = Math.max(headPx, Math.round(headPx * ASPECT))
-  // Integer module size on feed axis so modules stay sharp
-  const moduleFeed = Math.max(1, Math.round(feedPx / n))
+  const moduleFeed = Math.max(1, Math.round(moduleHead * ASPECT))
   const width = moduleFeed * n
-  const height = headPx
+  const height = moduleHead * n
 
   const canvas = document.createElement('canvas')
   canvas.width = width

@@ -14,13 +14,14 @@ export const PRINTABLE_ROWS = 30
 
 /** LT-200B engine feed DPI (from device registry). */
 export const DPI_FEED = 200
-/** Effective across-head DPI: 32 dots / 12 mm. */
-export const DPI_HEAD = (HEAD_ROWS / 12) * 25.4
+/** Nominal across-head DPI: 32 dots / 12 mm ≈ 67.7. */
+export const DPI_HEAD_NOMINAL = (HEAD_ROWS / 12) * 25.4
 /**
- * Feed dots per head dot for physically square geometry.
- * (~2.95) — without this, QR looks like a flat pancake on tape.
+ * Feed/head stretch for physically square shapes.
+ * Pure math is ~2.95, but cassette clipping makes that a bit oblong on tape.
+ * 2.55 is the practical middle (not pancake, not stretched).
  */
-export const ASPECT = DPI_FEED / DPI_HEAD
+export const ASPECT = 2.55
 
 /** Minimum physical length ~25 mm. */
 export const MIN_FEED_MM = 25
