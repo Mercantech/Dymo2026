@@ -1,7 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-ARG VITE_AUTH_CLIENT_ID=
+ARG VITE_AUTH_CLIENT_ID=dymotag
 ENV VITE_AUTH_CLIENT_ID=$VITE_AUTH_CLIENT_ID
 
 COPY package.json package-lock.json ./

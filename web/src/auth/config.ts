@@ -3,7 +3,8 @@ export const AUTH_AUTHORIZE = `${AUTH_ISSUER}/oauth/authorize`
 export const AUTH_TOKEN = `${AUTH_ISSUER}/oauth/token`
 export const AUTH_SIGNOUT = `${AUTH_ISSUER}/signout`
 
-export const AUTH_CLIENT_ID = import.meta.env.VITE_AUTH_CLIENT_ID as string | undefined
+export const AUTH_CLIENT_ID =
+  (import.meta.env.VITE_AUTH_CLIENT_ID as string | undefined) || 'dymotag'
 
 export function getRedirectUri(): string {
   return `${window.location.origin}/callback`

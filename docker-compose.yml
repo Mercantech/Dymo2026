@@ -4,7 +4,7 @@ services:
       context: ./web
       dockerfile: Dockerfile
       args:
-        VITE_AUTH_CLIENT_ID: ${VITE_AUTH_CLIENT_ID:-}
+        VITE_AUTH_CLIENT_ID: ${VITE_AUTH_CLIENT_ID:-dymotag}
     restart: unless-stopped
     networks:
       - dokploy-network
