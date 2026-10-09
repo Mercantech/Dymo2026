@@ -1,0 +1,14 @@
+services:
+  web:
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      - traefik.enable=false
+
+networks:
+  dokploy-network:
+    external: false
+    name: dymotag-local

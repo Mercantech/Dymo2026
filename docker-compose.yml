@@ -1,0 +1,21 @@
+services:
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        VITE_AUTH_CLIENT_ID: ${VITE_AUTH_CLIENT_ID:-}
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.dymotag.rule=Host(`dymo.mercantec.tech`)
+      - traefik.http.routers.dymotag.entrypoints=websecure
+      - traefik.http.routers.dymotag.tls.certresolver=letsencrypt
+      - traefik.http.services.dymotag.loadbalancer.server.port=3000
+
+networks:
+  dokploy-network:
+    external: true
