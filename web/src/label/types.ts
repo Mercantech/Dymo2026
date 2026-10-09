@@ -7,8 +7,11 @@ export type LabelSpec = {
   barcodeContent: string
 }
 
+/** Protocol head rows (across 12 mm tape). */
 export const HEAD_ROWS = 32
-/** Minimum feed columns to avoid LT-200B silent-reject quirk. */
-export const MIN_FEED_COLUMNS = 40
-export const H_PAD = 4
-export const GAP = 4
+/** Usable rows after cassette edge clip. */
+export const PRINTABLE_ROWS = 30
+/** Minimum feed length so labels aren't tiny stubs. */
+export const MIN_FEED_COLUMNS = 160
+export const H_PAD = 20
+export const GAP = 10

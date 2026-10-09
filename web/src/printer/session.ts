@@ -57,10 +57,12 @@ export async function printLabel(
     throw new Error('Ingen printer forbundet')
   }
 
+  // Image is already head-aligned (width = across tape, height = feed).
+  // Do not use rotate:'auto' — that treated our old landscape as tiny stubs.
   await printer.print(image, LT_PAPER_WHITE, {
     copies: options.copies ?? 1,
     autoCut: options.autoCut ?? true,
-    rotate: options.rotate ?? 'auto',
+    rotate: options.rotate ?? 0,
   })
 
   return printer.getStatus()

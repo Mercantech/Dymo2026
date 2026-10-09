@@ -1,26 +1,76 @@
 import JsBarcode from 'jsbarcode'
 import QRCode from 'qrcode'
 import type { RawImageData } from '@mbtech-nl/bitmap'
-import { GAP, HEAD_ROWS, H_PAD, MIN_FEED_COLUMNS, type LabelSpec } from './types'
+import {
+  GAP,
+  HEAD_ROWS,
+  H_PAD,
+  MIN_FEED_COLUMNS,
+  PRINTABLE_ROWS,
+  type LabelSpec,
+} from './types'
 
-/** Render at high res, then threshold-downsample to 32 head rows for print. */
-const SCALE = 8
+const PREVIEW_SCALE = 8
 
 export type ComposeResult = {
+  /** Head-aligned for LT driver: width = across head, height = feed. */
   image: RawImageData
   previewDataUrl: string
   widthPx: number
   heightPx: number
 }
 
-async function makeQrCanvas(content: string, size: number): Promise<HTMLCanvasElement> {
+function canvasToRaw(canvas: HTMLCanvasElement): RawImageData {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('Canvas 2D ikke tilgængelig')
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  return { width, height, data: new Uint8Array(data.buffer.slice(0)) }
+}
+
+/** Landscape (feed × head) → portrait head-aligned (head × feed) for printer.print. */
+function landscapeToHeadAligned(land: RawImageData): RawImageData {
+  const W = land.width
+  const H = land.height
+  const outW = H
+  const outH = W
+  const out = new Uint8Array(outW * outH * 4)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      // 90° CW: (x,y) → (H-1-y, x)
+      const nx = H - 1 - y
+      const ny = x
+      const si = (y * W + x) * 4
+      const di = (ny * outW + nx) * 4
+      out[di] = land.data[si]!
+      out[di + 1] = land.data[si + 1]!
+      out[di + 2] = land.data[si + 2]!
+      out[di + 3] = 255
+    }
+  }
+  return { width: outW, height: outH, data: out }
+}
+
+/** Crisp QR: integer module pixels, no anti-alias downsample mush. */
+function makeQrCanvas(content: string, maxSide: number): HTMLCanvasElement {
+  const qr = QRCode.create(content, { errorCorrectionLevel: 'M' })
+  const size = qr.modules.size
+  const modulePx = Math.max(1, Math.floor(maxSide / size))
+  const px = modulePx * size
   const canvas = document.createElement('canvas')
-  await QRCode.toCanvas(canvas, content, {
-    errorCorrectionLevel: 'M',
-    margin: 1,
-    width: size,
-    color: { dark: '#000000', light: '#ffffff' },
-  })
+  canvas.width = px
+  canvas.height = px
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D ikke tilgængelig')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, px, px)
+  ctx.fillStyle = '#000000'
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (qr.modules.get(r, c)) {
+        ctx.fillRect(c * modulePx, r * modulePx, modulePx, modulePx)
+      }
+    }
+  }
   return canvas
 }
 
@@ -31,7 +81,7 @@ function makeBarcodeCanvas(content: string, height: number): HTMLCanvasElement {
     displayValue: false,
     margin: 0,
     height,
-    width: Math.max(1, SCALE * 0.35),
+    width: 2,
     background: '#ffffff',
     lineColor: '#000000',
   })
@@ -41,49 +91,25 @@ function makeBarcodeCanvas(content: string, height: number): HTMLCanvasElement {
 function measureTextWidth(text: string, fontSize: number): number {
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')
-  if (!ctx) return text.length * fontSize * 0.6
+  if (!ctx) return text.length * fontSize * 0.55
   ctx.font = `700 ${fontSize}px "IBM Plex Sans", sans-serif`
   return Math.ceil(ctx.measureText(text).width)
 }
 
-/** Threshold high-res RGBA → 32-row print bitmap (1:1 with print head). */
-function downsampleToPrint(hi: HTMLCanvasElement): RawImageData {
-  const srcCtx = hi.getContext('2d', { willReadFrequently: true })
-  if (!srcCtx) throw new Error('Canvas 2D ikke tilgængelig')
-  const src = srcCtx.getImageData(0, 0, hi.width, hi.height)
-  const outW = Math.max(1, Math.round(hi.width / SCALE))
-  const outH = HEAD_ROWS
-  const data = new Uint8Array(outW * outH * 4)
-
-  for (let y = 0; y < outH; y++) {
-    for (let x = 0; x < outW; x++) {
-      let sum = 0
-      let count = 0
-      const x0 = x * SCALE
-      const y0 = y * SCALE
-      const x1 = Math.min(hi.width, x0 + SCALE)
-      const y1 = Math.min(hi.height, y0 + SCALE)
-      for (let py = y0; py < y1; py++) {
-        for (let px = x0; px < x1; px++) {
-          const i = (py * hi.width + px) * 4
-          // BT.709 luminance
-          sum += 0.2126 * src.data[i]! + 0.7152 * src.data[i + 1]! + 0.0722 * src.data[i + 2]!
-          count++
-        }
-      }
-      const lum = count ? sum / count : 255
-      const black = lum < 160
-      const o = (y * outW + x) * 4
-      data[o] = data[o + 1] = data[o + 2] = black ? 0 : 255
-      data[o + 3] = 255
-    }
-  }
-
-  return { width: outW, height: outH, data }
+function upscalePreview(src: HTMLCanvasElement, scale: number): string {
+  const out = document.createElement('canvas')
+  out.width = src.width * scale
+  out.height = src.height * scale
+  const ctx = out.getContext('2d')
+  if (!ctx) return src.toDataURL('image/png')
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(src, 0, 0, out.width, out.height)
+  return out.toDataURL('image/png')
 }
 
 /**
- * Build a label: hi-res preview + 32-row print bitmap.
+ * Build label at native 32-row print resolution (landscape draft),
+ * then rotate to head-aligned portrait for the LT-200B driver.
  */
 export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   const text = spec.text.trim()
@@ -98,21 +124,18 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
     throw new Error('Tilføj tekst, QR eller stregkode')
   }
 
-  const fontSizeHi = Math.max(10, Math.min(28, Math.round(spec.fontSize))) * SCALE
-  const headHi = HEAD_ROWS * SCALE
-  const qrSize = headHi - 2 * SCALE
-  const barcodeHeight = headHi - 4 * SCALE
-  const gap = GAP * SCALE
-  const hPad = H_PAD * SCALE
-  const minWidth = MIN_FEED_COLUMNS * SCALE
+  // Fill most of the printable tape height
+  const fontSize = Math.max(14, Math.min(30, Math.round(spec.fontSize)))
+  const qrSize = PRINTABLE_ROWS
+  const barcodeHeight = PRINTABLE_ROWS - 2
 
   let qrCanvas: HTMLCanvasElement | null = null
   let barcodeCanvas: HTMLCanvasElement | null = null
 
-  if (showQr) qrCanvas = await makeQrCanvas(qrContent, qrSize)
+  if (showQr) qrCanvas = makeQrCanvas(qrContent, qrSize)
   if (showBarcode) barcodeCanvas = makeBarcodeCanvas(barcodeContent, barcodeHeight)
 
-  const textWidth = showText ? measureTextWidth(text, fontSizeHi) : 0
+  const textWidth = showText ? measureTextWidth(text, fontSize) : 0
   const qrWidth = qrCanvas?.width ?? 0
   const barcodeWidth = barcodeCanvas?.width ?? 0
 
@@ -121,49 +144,50 @@ export async function composeLabel(spec: LabelSpec): Promise<ComposeResult> {
   if (showQr) parts.push(qrWidth)
   if (showBarcode) parts.push(barcodeWidth)
   const contentWidth =
-    parts.reduce((a, b) => a + b, 0) + gap * Math.max(0, parts.length - 1)
+    parts.reduce((a, b) => a + b, 0) + GAP * Math.max(0, parts.length - 1)
 
-  const width = Math.max(minWidth, contentWidth + hPad * 2)
+  const width = Math.max(MIN_FEED_COLUMNS, contentWidth + H_PAD * 2)
 
-  const hi = document.createElement('canvas')
-  hi.width = width
-  hi.height = headHi
-  const ctx = hi.getContext('2d')
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = HEAD_ROWS
+  const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas 2D ikke tilgængelig')
 
   ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, width, headHi)
+  ctx.fillRect(0, 0, width, HEAD_ROWS)
   ctx.fillStyle = '#000000'
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
+  ctx.imageSmoothingEnabled = false
 
-  let x = hPad
+  let x = H_PAD
 
   if (showText) {
-    ctx.font = `700 ${fontSizeHi}px "IBM Plex Sans", sans-serif`
+    ctx.font = `700 ${fontSize}px "IBM Plex Sans", sans-serif`
     ctx.textBaseline = 'middle'
-    ctx.fillText(text, x, headHi / 2)
-    x += textWidth + gap
+    // Snap to pixel grid for sharper thermal output
+    ctx.fillText(text, Math.round(x), Math.round(HEAD_ROWS / 2))
+    x += textWidth + GAP
   }
 
   if (qrCanvas) {
-    const y = Math.floor((headHi - qrCanvas.height) / 2)
-    ctx.drawImage(qrCanvas, x, y)
-    x += qrCanvas.width + gap
+    const y = Math.floor((HEAD_ROWS - qrCanvas.height) / 2)
+    ctx.drawImage(qrCanvas, Math.round(x), y)
+    x += qrCanvas.width + GAP
   }
 
   if (barcodeCanvas) {
-    const y = Math.floor((headHi - barcodeCanvas.height) / 2)
-    ctx.drawImage(barcodeCanvas, x, y)
+    const y = Math.floor((HEAD_ROWS - barcodeCanvas.height) / 2)
+    ctx.drawImage(barcodeCanvas, Math.round(x), y)
   }
 
-  const image = downsampleToPrint(hi)
-  const previewDataUrl = hi.toDataURL('image/png')
+  const landscape = canvasToRaw(canvas)
+  const image = landscapeToHeadAligned(landscape)
+  const previewDataUrl = upscalePreview(canvas, PREVIEW_SCALE)
 
   return {
     image,
     previewDataUrl,
-    widthPx: hi.width,
-    heightPx: hi.height,
+    widthPx: canvas.width * PREVIEW_SCALE,
+    heightPx: canvas.height * PREVIEW_SCALE,
   }
 }
